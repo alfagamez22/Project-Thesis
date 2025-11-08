@@ -1,0 +1,733 @@
+{% extends "base.html" %}
+
+{% block title %}Real-time Analytics - Thesis Prototype{% endblock %}
+
+{% block content %}
+<style>
+    .analytics-container {
+        padding: 20px;
+        max-width: 1400px;
+        margin: 0 auto;
+        max-height: calc(100vh - 100px);
+        overflow-y: auto;
+    }
+    
+    .analytics-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px 30px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    
+    .analytics-header h1 {
+        margin: 0;
+        font-size: 2em;
+    }
+    
+    .analytics-header p {
+        margin: 5px 0 0 0;
+        opacity: 0.9;
+        font-size: 0.95em;
+    }
+    
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+    
+    .stat-card {
+        background: white;
+        padding: 18px;
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        transition: transform 0.2s;
+    }
+    
+    .stat-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+    
+    .stat-label {
+        color: #666;
+        font-size: 0.85em;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 8px;
+    }
+    
+    .stat-value {
+        font-size: 2em;
+        font-weight: bold;
+        color: #667eea;
+    }
+    
+    .stat-change {
+        font-size: 0.9em;
+        margin-top: 5px;
+    }
+    
+    .stat-change.positive {
+        color: #10b981;
+    }
+    
+    .stat-change.negative {
+        color: #ef4444;
+    }
+    
+    .chart-container {
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+    
+    .chart-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+    }
+    
+    .chart-title {
+        font-size: 1.3em;
+        font-weight: bold;
+        color: #333;
+    }
+    
+    .chart-controls {
+        display: flex;
+        gap: 10px;
+    }
+    
+    .chart-controls select {
+        padding: 8px 15px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        font-size: 0.9em;
+    }
+    
+    .activity-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+    
+    .activity-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 15px;
+        border-bottom: 1px solid #f0f0f0;
+        transition: background 0.2s;
+    }
+    
+    .activity-item:hover {
+        background: #f9f9f9;
+    }
+    
+    .activity-name {
+        font-weight: 500;
+        color: #333;
+    }
+    
+    .activity-count {
+        font-size: 1.2em;
+        font-weight: bold;
+        color: #667eea;
+    }
+    
+    .activity-bar {
+        height: 5px;
+        background: #667eea;
+        border-radius: 5px;
+        margin-top: 5px;
+        transition: width 0.3s;
+    }
+    
+    .alert-panel {
+        background: #fff3cd;
+        border-left: 4px solid #ffc107;
+        padding: 15px;
+        border-radius: 5px;
+        margin-bottom: 20px;
+    }
+    
+    .alert-panel.warning {
+        background: #fff3cd;
+        border-color: #ffc107;
+    }
+    
+    .alert-panel.info {
+        background: #d1ecf1;
+        border-color: #17a2b8;
+    }
+    
+    .refresh-btn {
+        background: #667eea;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 1em;
+        transition: background 0.2s;
+    }
+    
+    .refresh-btn:hover {
+        background: #5568d3;
+    }
+    
+    .loading {
+        text-align: center;
+        padding: 40px;
+        color: #999;
+    }
+    
+    .spinner {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #667eea;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 20px auto;
+    }
+    
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    
+    .time-window-selector {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+    }
+    
+    .time-btn {
+        padding: 8px 15px;
+        border: 1px solid #ddd;
+        background: white;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .time-btn.active {
+        background: #667eea;
+        color: white;
+        border-color: #667eea;
+    }
+    
+    .time-btn:hover {
+        border-color: #667eea;
+    }
+    
+    .chart-subtitle {
+        font-size: 0.9em;
+        color: #666;
+        font-weight: normal;
+    }
+    
+    .activity-legend-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 12px;
+        padding: 10px 0;
+        max-height: 250px;
+        overflow-y: auto;
+    }
+    
+    .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px;
+        background: #f9f9f9;
+        border-radius: 5px;
+    }
+    
+    .legend-color {
+        width: 24px;
+        height: 24px;
+        border-radius: 4px;
+        border: 2px solid #ddd;
+        flex-shrink: 0;
+    }
+    
+    .legend-details {
+        flex: 1;
+        min-width: 0;
+    }
+    
+    .legend-name {
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 2px;
+        font-size: 0.9em;
+    }
+    
+    .legend-count {
+        font-size: 0.75em;
+        color: #666;
+    }
+</style>
+
+<div class="analytics-container">
+    <div class="analytics-header">
+        <h1>📊 Real-time Analytics Dashboard</h1>
+        <p>Live insights into employee activity patterns and behaviors</p>
+    </div>
+    
+    <!-- Alerts Section -->
+    <div id="alerts-section"></div>
+    
+    <!-- Key Metrics -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-label">Total Activities</div>
+            <div class="stat-value" id="total-activities">0</div>
+            <div class="stat-change" id="activities-change"></div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-label">Active Employees</div>
+            <div class="stat-value" id="active-employees">0</div>
+            <div class="stat-change" id="employees-change"></div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-label">Unique Activities</div>
+            <div class="stat-value" id="unique-activities">0</div>
+            <div class="stat-change" id="unique-change"></div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-label">Session Duration</div>
+            <div class="stat-value" id="session-duration">--</div>
+        </div>
+    </div>
+    
+    <!-- Time Window Selector -->
+    <div class="time-window-selector">
+        <button class="time-btn active" data-minutes="15">15 min</button>
+        <button class="time-btn" data-minutes="30">30 min</button>
+        <button class="time-btn" data-minutes="60">1 hour</button>
+        <button class="time-btn" data-minutes="180">3 hours</button>
+        <button class="refresh-btn" onclick="refreshDashboard()">🔄 Refresh</button>
+    </div>
+    
+    <!-- Activity Timeline Line Chart -->
+    <div class="chart-container">
+        <div class="chart-header">
+            <div class="chart-title">Activity Timeline (Live)</div>
+            <div class="chart-subtitle">Each activity is shown in a different color</div>
+        </div>
+        <canvas id="activity-timeline-chart" style="height: 350px; max-height: 350px;"></canvas>
+    </div>
+    
+    <!-- Two Column Layout for Legend and Top Activities -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
+        <!-- Activity Legend -->
+        <div class="chart-container" style="margin-bottom: 0;">
+            <div class="chart-header">
+                <div class="chart-title">Activity Summary</div>
+            </div>
+            <div id="activity-legend" class="activity-legend-grid"></div>
+        </div>
+        
+        <!-- Top Activities Chart -->
+        <div class="chart-container" style="margin-bottom: 0;">
+            <div class="chart-header">
+                <div class="chart-title">Top Activities</div>
+            </div>
+            <canvas id="top-activities-chart" style="height: 250px; max-height: 250px;"></canvas>
+        </div>
+    </div>
+    
+    <!-- Employee Statistics -->
+    <div class="chart-container">
+        <div class="chart-header">
+            <div class="chart-title">Employee Statistics</div>
+        </div>
+        <div id="employee-stats">
+            <div class="loading">
+                <div class="spinner"></div>
+                Loading employee statistics...
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@2.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script>
+let topActivitiesChart = null;
+let activityTimelineChart = null;
+let currentTimeWindow = 15; // minutes
+let updateInterval = null;
+
+// Color palette for different activities
+const activityColors = {
+    'stand': '#ef4444',           // Red
+    'walk': '#3b82f6',            // Blue
+    'sit': '#10b981',             // Green
+    'talk': '#f59e0b',            // Orange
+    'brewing': '#8b5cf6',         // Purple
+    'phone': '#ec4899',           // Pink
+    'carry': '#14b8a6',           // Teal
+    'run': '#f97316',             // Dark Orange
+    'drink': '#06b6d4',           // Cyan
+    'eat': '#84cc16',             // Lime
+    'write': '#6366f1',           // Indigo
+    'read': '#a855f7',            // Violet
+    'clean': '#22d3ee',           // Light Cyan
+    'cook': '#fb923c',            // Light Orange
+    'default': '#64748b'          // Gray
+};
+
+// Get color for activity (case insensitive, handles partial matches)
+function getActivityColor(activity) {
+    const activityLower = activity.toLowerCase();
+    
+    // Direct match
+    if (activityColors[activityLower]) {
+        return activityColors[activityLower];
+    }
+    
+    // Partial match
+    for (const [key, color] of Object.entries(activityColors)) {
+        if (activityLower.includes(key) || key.includes(activityLower)) {
+            return color;
+        }
+    }
+    
+    // Generate consistent color from activity name
+    let hash = 0;
+    for (let i = 0; i < activity.length; i++) {
+        hash = activity.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const hue = hash % 360;
+    return `hsl(${hue}, 70%, 55%)`;
+}
+
+// Initialize dashboard
+document.addEventListener('DOMContentLoaded', function() {
+    refreshDashboard();
+    
+    // Set up time window buttons
+    document.querySelectorAll('.time-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            currentTimeWindow = parseInt(this.dataset.minutes);
+            refreshDashboard();
+        });
+    });
+    
+    // Auto-refresh every 5 seconds
+    updateInterval = setInterval(refreshDashboard, 5000);
+});
+
+async function refreshDashboard() {
+    try {
+        // Fetch dashboard data with time window
+        const response = await fetch(`/api/analytics/dashboard?time_window=${currentTimeWindow}`);
+        const result = await response.json();
+        
+        if (result.success) {
+            updateMetrics(result.data);
+            updateTopActivities(result.data.top_activities);
+            updateEmployeeStats(result.data.employee_stats);
+        }
+        
+        // Fetch timeline data for all activities
+        const timelineResponse = await fetch(`/api/analytics/timeline/all?time_window=${currentTimeWindow}`);
+        const timelineResult = await timelineResponse.json();
+        
+        if (timelineResult.success) {
+            updateActivityTimeline(timelineResult.data);
+        }
+        
+        // Fetch alerts
+        const alertsResponse = await fetch('/api/analytics/alerts');
+        const alertsResult = await alertsResponse.json();
+        
+        if (alertsResult.success) {
+            updateAlerts(alertsResult.data);
+        }
+        
+    } catch (error) {
+        console.error('Error refreshing dashboard:', error);
+    }
+}
+
+function updateMetrics(data) {
+    const snapshot = data.snapshot;
+    
+    document.getElementById('total-activities').textContent = snapshot.total_activities || 0;
+    document.getElementById('active-employees').textContent = snapshot.active_employees || 0;
+    document.getElementById('unique-activities').textContent = snapshot.unique_activities || 0;
+    
+    const duration = snapshot.session_duration_minutes || 0;
+    document.getElementById('session-duration').textContent = 
+        duration < 60 ? `${Math.round(duration)} min` : `${Math.round(duration / 60)} hr`;
+}
+
+function updateActivityTimeline(timelineData) {
+    if (!timelineData || Object.keys(timelineData).length === 0) {
+        // Show message if no data
+        const ctx = document.getElementById('activity-timeline-chart');
+        if (activityTimelineChart) activityTimelineChart.destroy();
+        return;
+    }
+    
+    // Prepare datasets for each activity
+    const datasets = [];
+    const activityCounts = {};
+    
+    for (const [activity, trends] of Object.entries(timelineData)) {
+        const color = getActivityColor(activity);
+        const totalCount = trends.reduce((sum, point) => sum + point.count, 0);
+        activityCounts[activity] = totalCount;
+        
+        datasets.push({
+            label: activity,
+            data: trends.map(point => ({
+                x: new Date(point.timestamp),
+                y: point.count
+            })),
+            borderColor: color,
+            backgroundColor: color + '40', // Add transparency for fill
+            borderWidth: 2.5,
+            fill: true, // Fill area under line
+            tension: 0.4, // Smooth curves
+            pointRadius: 3,
+            pointHoverRadius: 6,
+            pointBackgroundColor: color,
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2
+        });
+    }
+    
+    // Update legend
+    updateActivityLegend(activityCounts);
+    
+    // Destroy existing chart
+    if (activityTimelineChart) {
+        activityTimelineChart.destroy();
+    }
+    
+    // Create new chart
+    const ctx = document.getElementById('activity-timeline-chart').getContext('2d');
+    activityTimelineChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            plugins: {
+                title: {
+                    display: true,
+                    text: `Activity Timeline - Last ${currentTimeWindow} Minutes`,
+                    font: {
+                        size: 14
+                    }
+                },
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: {
+                        usePointStyle: true,
+                        padding: 15
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        title: function(context) {
+                            const date = new Date(context[0].parsed.x);
+                            return date.toLocaleTimeString();
+                        },
+                        label: function(context) {
+                            return `${context.dataset.label}: ${context.parsed.y} occurrences`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    type: 'time',
+                    time: {
+                        unit: currentTimeWindow <= 15 ? 'minute' : 
+                              currentTimeWindow <= 60 ? 'minute' : 'hour',
+                        displayFormats: {
+                            minute: 'HH:mm',
+                            hour: 'HH:mm'
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: 'Time'
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1
+                    },
+                    title: {
+                        display: true,
+                        text: 'Activity Count'
+                    }
+                }
+            }
+        }
+    });
+}
+
+function updateActivityLegend(activityCounts) {
+    const legendContainer = document.getElementById('activity-legend');
+    
+    if (!activityCounts || Object.keys(activityCounts).length === 0) {
+        legendContainer.innerHTML = '<p style="color: #666; text-align: center;">No activities detected yet</p>';
+        return;
+    }
+    
+    // Sort by count
+    const sorted = Object.entries(activityCounts).sort((a, b) => b[1] - a[1]);
+    
+    let html = '';
+    for (const [activity, count] of sorted) {
+        const color = getActivityColor(activity);
+        const percentage = count > 0 ? ((count / Object.values(activityCounts).reduce((a,b) => a+b, 0)) * 100).toFixed(1) : 0;
+        
+        html += `
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: ${color};"></div>
+                <div class="legend-details">
+                    <div class="legend-name">${activity}</div>
+                    <div class="legend-count">${count} occurrences (${percentage}%)</div>
+                </div>
+            </div>
+        `;
+    }
+    
+    legendContainer.innerHTML = html;
+}
+
+function updateTopActivities(activities) {
+    // Update chart
+    if (topActivitiesChart) {
+        topActivitiesChart.destroy();
+    }
+    
+    if (!activities || activities.length === 0) {
+        return;
+    }
+    
+    // Use activity colors
+    const colors = activities.map(a => getActivityColor(a[0]));
+    
+    const ctx = document.getElementById('top-activities-chart').getContext('2d');
+    topActivitiesChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: activities.map(a => a[0]),
+            datasets: [{
+                label: 'Activity Count',
+                data: activities.map(a => a[1]),
+                backgroundColor: colors.map(c => c + '80'),
+                borderColor: colors,
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const percentage = activities[context.dataIndex][2];
+                            return `${context.parsed.y} occurrences (${percentage}%)`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1
+                    }
+                }
+            }
+        }
+    });
+}
+
+function updateEmployeeStats(stats) {
+    const container = document.getElementById('employee-stats');
+    
+    if (!stats || !stats.employees || Object.keys(stats.employees).length === 0) {
+        container.innerHTML = '<p class="loading">No employee activity detected yet</p>';
+        return;
+    }
+    
+    let html = '<div class="stats-grid">';
+    
+    for (const [empId, empStats] of Object.entries(stats.employees)) {
+        html += `
+            <div class="stat-card">
+                <div class="stat-label">${empId}</div>
+                <div class="stat-value">${empStats.total_activities}</div>
+                <div style="font-size: 0.9em; color: #666; margin-top: 10px;">
+                    <strong>Top Activity:</strong> ${empStats.top_activity || 'N/A'}<br>
+                    <strong>Unique Activities:</strong> ${empStats.unique_activities}
+                </div>
+            </div>
+        `;
+    }
+    
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function updateAlerts(alerts) {
+    const alertsSection = document.getElementById('alerts-section');
+    
+    if (!alerts || alerts.length === 0) {
+        alertsSection.innerHTML = '';
+        return;
+    }
+    
+    alertsSection.innerHTML = alerts.map(alert => `
+        <div class="alert-panel ${alert.severity}">
+            <strong>${alert.type.replace(/_/g, ' ').toUpperCase()}:</strong> ${alert.message}
+        </div>
+    `).join('');
+}
+
+// Clean up on page unload
+window.addEventListener('beforeunload', function() {
+    if (updateInterval) {
+        clearInterval(updateInterval);
+    }
+});
+</script>
+{% endblock %}

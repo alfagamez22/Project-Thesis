@@ -1,6 +1,15 @@
 import os
 import logging
-from pkg_resources import packaging
+import warnings
+
+# Suppress pkg_resources deprecation warning
+warnings.filterwarnings('ignore', category=UserWarning, module='pkg_resources')
+
+try:
+    from packaging import version
+except ImportError:
+    from pkg_resources import packaging
+    version = packaging.version
 
 import torch
 import numpy as np
@@ -270,10 +279,8 @@ class HB(nn.Module):
         all_tokens = [[sot_token] + self.tokenizer.encode(text) + [eot_token] for text in texts]
         if context_length == 'auto':
             context_length = max(len(tokens) for tokens in all_tokens)
-        if packaging.version.parse(torch.__version__) < packaging.version.parse("1.8.0"):
-            result = torch.zeros(len(all_tokens), context_length, dtype=torch.long)
-        else:
-            result = torch.zeros(len(all_tokens), context_length, dtype=torch.int)
+        # Use modern PyTorch (>= 1.8.0) integer type
+        result = torch.zeros(len(all_tokens), context_length, dtype=torch.int)
 
         for i, tokens in enumerate(all_tokens):
             if len(tokens) > context_length:

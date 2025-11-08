@@ -1,6 +1,12 @@
 from flask import Flask, render_template, Response, jsonify, request, send_from_directory, session, redirect, url_for, flash
 import sys
 import os
+import warnings
+
+# Suppress specific warnings
+warnings.filterwarnings('ignore', category=FutureWarning, module='timm')
+warnings.filterwarnings('ignore', category=UserWarning, module='pkg_resources')
+
 from datetime import datetime
 from werkzeug.utils import secure_filename
 import uuid
@@ -19,6 +25,8 @@ from flask_socketio import SocketIO, emit
 from werkzeug.security import check_password_hash, generate_password_hash
 import re
 import json
+# Import analytics
+from backend.analytics import analytics_engine, get_analytics_dashboard, get_analytics_snapshot
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -103,7 +111,12 @@ def save_user_data(data):
         
         # Convert date to ISO format string for JSON serialization
         data_to_save = data.copy()
-        data_to_save['dob'] = data['dob'].isoformat()
+        # Check if dob is already a string or needs conversion
+        if hasattr(data['dob'], 'isoformat'):
+            data_to_save['dob'] = data['dob'].isoformat()
+        else:
+            # If it's already a string, keep it as is
+            data_to_save['dob'] = data['dob']
         
         with open(USER_DATA_FILE, 'w') as f:
             json.dump(data_to_save, f, indent=4)
@@ -1009,6 +1022,217 @@ def admin_logout():
     session.pop('admin_logged_in', None)
     return redirect(url_for('admin_login'))
 
+# ----------------------
+# Real-time Analytics API Endpoints
+# ----------------------
+
+@app.route('/api/analytics/snapshot')
+@login_required
+def analytics_snapshot():
+    """Get current analytics snapshot"""
+    try:
+        snapshot = get_analytics_snapshot()
+        return jsonify({
+            "success": True,
+            "data": snapshot
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@app.route('/api/analytics/dashboard')
+@login_required
+def analytics_dashboard():
+    """Get comprehensive analytics dashboard"""
+    try:
+        dashboard = get_analytics_dashboard()
+        return jsonify({
+            "success": True,
+            "data": dashboard
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@app.route('/api/analytics/top-activities')
+@login_required
+def analytics_top_activities():
+    """Get top activities"""
+    limit = request.args.get('limit', 10, type=int)
+    time_window = request.args.get('time_window', 60, type=int)
+    
+    try:
+        top_activities = analytics_engine.get_top_activities(
+            limit=limit,
+            time_window_minutes=time_window
+        )
+        return jsonify({
+            "success": True,
+            "data": top_activities
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@app.route('/api/analytics/timeline/<activity_name>')
+@login_required
+def analytics_timeline(activity_name):
+    """Get timeline for a specific activity"""
+    minutes = request.args.get('minutes', 60, type=int)
+    
+    try:
+        timeline = analytics_engine.get_activity_timeline(
+            activity_name=activity_name,
+            minutes=minutes
+        )
+        return jsonify({
+            "success": True,
+            "activity": activity_name,
+            "data": timeline
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@app.route('/api/analytics/timeline/all')
+@login_required
+def analytics_all_timelines():
+    """Get timeline for all activities"""
+    minutes = request.args.get('minutes', 60, type=int)
+    
+    try:
+        timelines = analytics_engine.get_all_activities_timeline(minutes=minutes)
+        return jsonify({
+            "success": True,
+            "data": timelines
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@app.route('/api/analytics/employee/<employee_id>')
+@login_required
+def analytics_employee_stats(employee_id):
+    """Get statistics for a specific employee"""
+    try:
+        stats = analytics_engine.get_employee_statistics(employee_id=employee_id)
+        return jsonify({
+            "success": True,
+            "data": stats
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@app.route('/api/analytics/employees')
+@login_required
+def analytics_all_employees():
+    """Get statistics for all employees"""
+    try:
+        stats = analytics_engine.get_employee_statistics()
+        return jsonify({
+            "success": True,
+            "data": stats
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@app.route('/api/analytics/hourly')
+@login_required
+def analytics_hourly():
+    """Get hourly breakdown"""
+    hours = request.args.get('hours', 24, type=int)
+    
+    try:
+        breakdown = analytics_engine.get_hourly_breakdown(hours=hours)
+        return jsonify({
+            "success": True,
+            "data": breakdown
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@app.route('/api/analytics/trends/<activity_name>')
+@login_required
+def analytics_trends(activity_name):
+    """Get trend analysis for an activity"""
+    intervals = request.args.get('intervals', 12, type=int)
+    
+    try:
+        trends = analytics_engine.get_activity_trends(
+            activity_name=activity_name,
+            intervals=intervals
+        )
+        return jsonify({
+            "success": True,
+            "data": trends
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@app.route('/api/analytics/alerts')
+@login_required
+def analytics_alerts():
+    """Get active alerts"""
+    try:
+        alerts = analytics_engine.get_alerts()
+        return jsonify({
+            "success": True,
+            "data": alerts
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@app.route('/api/analytics/reset', methods=['POST'])
+@login_required
+def analytics_reset():
+    """Reset analytics statistics"""
+    try:
+        analytics_engine.reset_statistics()
+        return jsonify({
+            "success": True,
+            "message": "Analytics statistics reset successfully"
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@app.route('/analytics')
+@login_required
+def analytics_page():
+    """Render analytics dashboard page"""
+    return render_template('analytics.html')
+
+# ----------------------
+# End of Analytics Endpoints
+# ----------------------
+
 if __name__ == "__main__":
     # Ensure user data is properly initialized
     if not os.path.exists(USER_DATA_FILE):
@@ -1017,7 +1241,21 @@ if __name__ == "__main__":
         print(f"Password: password")  # Don't print the hashed password
         save_user_data(DEFAULT_USER_DATA)
     
-    # Run the app with SocketIO
-    # print("Starting server on http://localhost:5000")
-    # app.run(host="127.0.0.1", port=5000, debug=True)  # Changed from 0.0.0.0 to 127.0.0.1
-    socketio.run(app, host="0.0.0.0", port=5000, debug=True)
+    # Run the app with SocketIO (optimized configuration)
+    print("=" * 60)
+    print("Starting Thesis Prototype Server")
+    print("=" * 60)
+    print(f"Server URL: http://0.0.0.0:5000")
+    print(f"GPU Available: {livefeed.model_manager.device if livefeed.model_manager else 'Not initialized'}")
+    print("=" * 60)
+    
+    # Use simple-websocket async_mode for better performance
+    socketio.run(
+        app, 
+        host="0.0.0.0", 
+        port=5000, 
+        debug=False,  # Disable debug to prevent double initialization
+        use_reloader=False,  # Disable reloader to prevent model reloading
+        log_output=True,
+        allow_unsafe_werkzeug=True  # Allow Werkzeug for development
+    )

@@ -1,7 +1,16 @@
 import os
 import logging
 from collections import OrderedDict
-from pkg_resources import packaging
+import warnings
+
+# Suppress pkg_resources deprecation warning
+warnings.filterwarnings('ignore', category=UserWarning, module='pkg_resources')
+
+try:
+    from packaging import version
+except ImportError:
+    from pkg_resources import packaging
+    version = packaging.version
 
 import numpy as np
 import torch

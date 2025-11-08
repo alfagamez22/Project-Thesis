@@ -1,0 +1,10 @@
+{
+    "username": "username",
+    "email": "admin@example.com",
+    "password": "scrypt:32768:8:1$pwSjdOqoKMhkXfkk$f99c1dd011bf6cebde4041c68062d6cb05878ce9c220126d66fdb9118adfc55de6261681d8f739e1aaae41042e52b3d40f73f8ccc37a6b254be4bca643833737",
+    "full_name": "Administrator",
+    "phone": "09123456789",
+    "dob": "1990-01-01",
+    "gender": "male",
+    "bio": "System Administrator"
+}

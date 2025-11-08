@@ -42,8 +42,8 @@ class Config:
         parser.add_argument("-delay", type=int, default=30, help="frame delay amount")
         parser.add_argument("-fps", type=int, default=10, help="target frames per second")
         parser.add_argument("-det_freq", type=int, default=6, help="detection frequency (every N frames)")
-        #parser.add_argument("-F", type=str, default=os.path.join(os.path.dirname(__file__), "assets", "COFFEESHOP_1.mp4"), help="file path for video input")
-        parser.add_argument("-F", type=str, default=os.path.join(os.path.dirname(__file__), "assets", "rtsp.mp4"), help="file path for video input")
+        parser.add_argument("-F", type=str, default=os.path.join(os.path.dirname(__file__), "assets", "COFFEESHOP_1.mp4"), help="file path for video input")
+        #parser.add_argument("-F", type=str, default=os.path.join(os.path.dirname(__file__), "assets", "rtsp.mp4"), help="file path for video input")
         # parser.add_argument("-F", type=str, default="<REPLACE> rtsp://username:password@tunnelip:8554/stream2?tcp <REPLACE>", help="file path for video input") #rtsp://username:password@tunnelip:8554/stream2?tcp
      #   parser.add_argument("-F", type=str, default="rtsp://harveybuan123:harveybuan1234@100.107.152.111:8554/my_camera?tcp", help="file path for video input") #for rtsp stream 192.168.68.128:554 #rtsp://harveybuan123:harveybuan1234@100.107.152.111:8554/stream2?tcp
     #    parser.add_argument("-F", type=str, default="rtsp://harveybuan123:harveybuan1234@100.107.152.111:8554/my_camera?tcp", help="file path for video input") #for rtsp stream 192.168.68.128:554 #rtsp://harveybuan123:harveybuan1234@100.107.152.111:8554/stream2?tcp
@@ -84,12 +84,12 @@ class Config:
         ]
         
         # Keep backward compatibility with line-based ROI
-        self.roi_line_p1 = (1163, 425)
-        self.roi_line_p2 = (97, 121)
+        # self.roi_line_p1 = (1163, 425)
+        # self.roi_line_p2 = (97, 121)
         
         #for recorded coffee shop 
-        #self.roi_line_p1 = (7, 299)
-        #self.roi_line_p2 = (1253, 675)
+        self.roi_line_p1 = (7, 299)
+        self.roi_line_p2 = (1253, 675)
 
         # Set video path
         # if self.args.F and not os.path.isabs(self.args.F):
@@ -103,14 +103,19 @@ class Config:
 class ModelManager:
     def __init__(self, config):
         self.config = config
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
+        # Enhanced GPU detection and configuration
+        self.device = self._setup_device()
         print(f"Using device: {self.device}")
         
-        # Configure CUDA for performance
-        os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-        if torch.cuda.is_available():
+        # Configure CUDA for performance if available
+        if self.device.type == "cuda":
+            os.environ["CUDA_VISIBLE_DEVICES"] = "0"
             torch.backends.cuda.matmul.allow_tf32 = True
             torch.backends.cudnn.benchmark = True
+            print(f"CUDA device count: {torch.cuda.device_count()}")
+            print(f"CUDA device name: {torch.cuda.get_device_name(0)}")
+            print(f"CUDA memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
         
         # Set up RT-DETR detector
         self.setup_detector()
@@ -127,6 +132,40 @@ class ModelManager:
         
         # Toggle states
         self.activity_recognition_on = True
+
+    def _setup_device(self):
+        """Enhanced device setup with better GPU detection and fallback options"""
+        try:
+            # First check if CUDA is available
+            if torch.cuda.is_available():
+                device_count = torch.cuda.device_count()
+                print(f"CUDA is available. Found {device_count} GPU(s)")
+                
+                # Try to use the first GPU
+                try:
+                    device = torch.device("cuda:0")
+                    # Test GPU by creating a small tensor
+                    test_tensor = torch.randn(1, device=device)
+                    print(f"Successfully initialized GPU: {torch.cuda.get_device_name(0)}")
+                    del test_tensor  # Clean up test tensor
+                    torch.cuda.empty_cache()
+                    return device
+                except Exception as gpu_error:
+                    print(f"GPU initialization failed: {gpu_error}")
+                    print("Falling back to CPU")
+                    
+            else:
+                print("CUDA is not available. Reasons could be:")
+                print("- PyTorch was installed without CUDA support")
+                print("- NVIDIA GPU drivers are not installed or outdated")
+                print("- CUDA toolkit is not installed or incompatible")
+                
+        except Exception as e:
+            print(f"Error during device setup: {e}")
+            
+        # Fallback to CPU
+        print("Using CPU device")
+        return torch.device("cpu")
 
     def setup_detector(self):
         """Initialize the RT-DETR person detector"""
@@ -153,7 +192,7 @@ class ModelManager:
         self.action_model = get_hb(size='b', pretrain=None, det_token_num=20, 
                               text_lora=True, num_frames=9)['hb']
         self.action_model.load_state_dict(
-            torch.load(self.config.args.weights, map_location='cpu'), 
+            torch.load(self.config.args.weights, map_location='cpu', weights_only=False), 
             strict=False
         )
         self.action_model.to(self.device).eval()
@@ -902,6 +941,30 @@ activity_logs_lock = threading.Lock()
 client_last_log_index = {}
 client_sessions_lock = threading.Lock()
 
+# Cache captions at module level to avoid repeated file I/O
+_cached_captions = None
+_captions_lock = threading.Lock()
+
+def _get_cached_captions():
+    """Get cached captions, loading them only once"""
+    global _cached_captions
+    if _cached_captions is None:
+        with _captions_lock:
+            # Double-check after acquiring lock
+            if _cached_captions is None:
+                try:
+                    # Try to access captions through the global video_manager if available
+                    if 'video_manager' in globals() and hasattr(video_manager, 'model_manager'):
+                        _cached_captions = video_manager.model_manager.captions
+                    else:
+                        # Fallback: load captions from the JSON file
+                        with open(os.path.join(os.path.dirname(__file__), 'ava_classes.json'), 'r') as f:
+                            _cached_captions = json.load(f)
+                except Exception as e:
+                    print(f"Error loading captions: {e}")
+                    _cached_captions = []
+    return _cached_captions
+
 def log_activity_detection(person_detections, person_actions, roi_to_original_mapping):
     """Log activity detections for the live feed logs"""
     try:
@@ -909,6 +972,12 @@ def log_activity_detection(person_detections, person_actions, roi_to_original_ma
             return
         
         timestamp = datetime.datetime.now()
+        
+        # Get cached captions once
+        captions = _get_cached_captions()
+        
+        # Note: Analytics now reads directly from activity_logs
+        # No need for separate analytics recording
         
         with activity_logs_lock:
             # Create log entries for each person with detected activities
@@ -923,21 +992,14 @@ def log_activity_detection(person_detections, person_actions, roi_to_original_ma
                 # Generate employee ID based on detection order
                 employee_id = f"EMP_{roi_idx + 1:03d}"
                 
-                # Extract action names - we'll need to access this through a global or pass it as parameter
+                # Extract action names using cached captions
                 action_names = []
                 for action_idx, confidence in actions:
-                    # Use a global captions list or import from a shared module
                     try:
-                        # Try to access captions through the global video_manager if available
-                        if 'video_manager' in globals() and hasattr(video_manager, 'model_manager'):
-                            captions = video_manager.model_manager.captions
-                        else:
-                            # Fallback: load captions from the JSON file
-                            with open(os.path.join(os.path.dirname(__file__), 'ava_classes.json'), 'r') as f:
-                                captions = json.load(f)
-                        
                         if action_idx < len(captions):
                             action_names.append(captions[action_idx])
+                        else:
+                            action_names.append(f"Action_{action_idx}")
                     except Exception as e:
                         action_names.append(f"Action_{action_idx}")
                 
@@ -1039,37 +1101,52 @@ def log_activity_detection_simple(detections_dict):
 # ----------------------
 # Create global instances for use in Flask application
 config = Config()
-model_manager = ModelManager(config)
-video_manager = VideoManager(config, model_manager)
+model_manager = None
+video_manager = None
+
+def _ensure_initialized():
+    """Ensure model_manager and video_manager are initialized"""
+    global model_manager, video_manager
+    if model_manager is None:
+        model_manager = ModelManager(config)
+    if video_manager is None:
+        video_manager = VideoManager(config, model_manager)
 
 def start_background_video_thread():
     """Start the video processing in a background thread"""
+    _ensure_initialized()
     return video_manager.start_background_video_thread()
 
 def get_latest_frame():
     """Get the latest processed frame"""
+    _ensure_initialized()
     return video_manager.get_latest_frame()
 
 def toggle_activity_recognition():
     """Toggle the activity recognition feature on/off"""
+    _ensure_initialized()
     return model_manager.toggle_activity_recognition()
 
 def get_activity_recognition_state():
     """Get current state of activity recognition"""
+    _ensure_initialized()
     return model_manager.get_activity_recognition_state()
 
 def start_recording(recording_type="original"):
     """Start recording of the specified type"""
+    _ensure_initialized()
     video_manager.setup_recording(recording_type)
     return video_manager.original_recording_active if recording_type == "original" else video_manager.segmented_recording_active
 
 def stop_recording(recording_type="original"):
     """Stop recording of the specified type"""
+    _ensure_initialized()
     video_manager.stop_recording(recording_type)
     return not (video_manager.original_recording_active if recording_type == "original" else video_manager.segmented_recording_active)
 
 def get_recording_status():
     """Get the status of both recording types"""
+    _ensure_initialized()
     return {
         "original": video_manager.original_recording_active,
         "segmented": video_manager.segmented_recording_active
@@ -1094,6 +1171,7 @@ def stop_dual_recording():
 def capture_employee_activity():
     """Capture current frame and detected employees for activity monitoring"""
     try:
+        _ensure_initialized()
         # Get current frame and detections from video manager
         if not hasattr(video_manager, 'current_frame') or video_manager.current_frame is None:
             return {"success": False, "error": "No current frame available"}
@@ -1219,6 +1297,7 @@ def clear_employee_captures():
 def get_active_employees_count():
     """Get count of currently active employees"""
     try:
+        _ensure_initialized()
         # Get current detections
         detections = getattr(video_manager, 'current_detections', [])
         active_count = 0

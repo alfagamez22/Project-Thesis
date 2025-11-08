@@ -2,7 +2,7 @@ import cv2
 import matplotlib.pyplot as plt
 
 # Load the first frame from the video
-cap = cv2.VideoCapture(r'H:\12HOUR_VIDEO_CCTV\thesis_prototype\backend\har\assets\rtsp.mp4')
+cap = cv2.VideoCapture(r'C:\Users\buanh\OneDrive\Documents\VSCODE_SAVES\PYTHON\Thesis\thesis_prototype\backend\har\assets\COFFEESHOP_1.mp4')
 ret, frame = cap.read()
 cap.release()
 
