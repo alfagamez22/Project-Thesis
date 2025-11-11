@@ -131,7 +131,7 @@ class ModelManager:
         self.postprocess = PostProcessActions()
         
         # Toggle states
-        self.activity_recognition_on = True
+        self.activity_recognition_on = False
 
     def _setup_device(self):
         """Enhanced device setup with better GPU detection and fallback options"""
