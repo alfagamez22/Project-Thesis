@@ -138,7 +138,8 @@ class ActivityAnalytics:
     
     def get_employee_statistics(self, employee_id: Optional[str] = None, time_window_minutes: int = 60) -> Dict:
         """
-        Get statistics for a specific employee or all employees
+        Get statistics for a specific employee or all employees.
+        Each employee appears only once with aggregated statistics.
         
         Args:
             employee_id: Optional employee ID (None for all employees)
@@ -154,12 +155,13 @@ class ActivityAnalytics:
             if not filtered_logs:
                 return {}
             
-            # Group by employee
+            # Group by employee - each employee ID appears only once
             employee_data: Dict = defaultdict(lambda: {
                 'total_activities': 0,
                 'unique_activities': set(),
                 'activity_counts': Counter(),
-                'last_seen': None
+                'last_seen': None,
+                'first_seen': None
             })
             
             for log in filtered_logs:
@@ -170,14 +172,20 @@ class ActivityAnalytics:
                 if employee_id and emp_id != employee_id:
                     continue
                 
-                employee_data[emp_id]['total_activities'] += 1
+                # Track first and last seen for this employee
+                if employee_data[emp_id]['first_seen'] is None:
+                    employee_data[emp_id]['first_seen'] = timestamp
+                    
+                # Count total activities (number of actions detected, not log entries)
+                employee_data[emp_id]['total_activities'] += len(actions)
                 employee_data[emp_id]['last_seen'] = timestamp
                 
+                # Track unique activities and individual activity counts
                 for action in actions:
                     employee_data[emp_id]['unique_activities'].add(action)
                     employee_data[emp_id]['activity_counts'][action] += 1
             
-            # Format output
+            # Format output - each employee appears once
             result = {}
             for emp_id, data in employee_data.items():
                 top_activity = data['activity_counts'].most_common(1)
@@ -188,6 +196,7 @@ class ActivityAnalytics:
                     'top_activity': top_activity[0][0] if top_activity else None,
                     'top_activity_count': top_activity[0][1] if top_activity else 0,
                     'last_seen': data['last_seen'],
+                    'first_seen': data['first_seen'],
                     'all_activities': dict(data['activity_counts'])
                 }
             

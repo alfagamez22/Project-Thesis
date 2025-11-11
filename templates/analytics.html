@@ -618,22 +618,67 @@ function updateTopActivities(activities) {
 function updateEmployeeStats(stats) {
     const container = document.getElementById('employee-stats');
     
-    if (!stats || !stats.employees || Object.keys(stats.employees).length === 0) {
+    if (!stats || Object.keys(stats).length === 0) {
         container.innerHTML = '<p class="loading">No employee activity detected yet</p>';
         return;
     }
     
-    let html = '<div class="stats-grid">';
+    // Get employees object - handle both formats
+    const employees = stats.employees || stats;
     
-    for (const [empId, empStats] of Object.entries(stats.employees)) {
+    if (!employees || Object.keys(employees).length === 0) {
+        container.innerHTML = '<p class="loading">No employee activity detected yet</p>';
+        return;
+    }
+    
+    let html = '<div class="employee-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px;">';
+    
+    // Sort employees by total activities (descending)
+    const sortedEmployees = Object.entries(employees).sort((a, b) => 
+        b[1].total_activities - a[1].total_activities
+    );
+    
+    for (const [empId, empStats] of sortedEmployees) {
+        const activityText = empStats.total_activities === 1 ? 'activity' : 'activities';
+        
+        // Build activity list HTML
+        let activitiesListHTML = '';
+        if (empStats.all_activities && Object.keys(empStats.all_activities).length > 0) {
+            // Sort activities by count (descending)
+            const sortedActivities = Object.entries(empStats.all_activities).sort((a, b) => b[1] - a[1]);
+            
+            activitiesListHTML = '<div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #e5e7eb;">';
+            activitiesListHTML += '<div style="font-weight: 600; color: #333; margin-bottom: 8px; font-size: 0.9em;">Activity Breakdown:</div>';
+            
+            for (const [activity, count] of sortedActivities) {
+                const percentage = ((count / empStats.total_activities) * 100).toFixed(0);
+                activitiesListHTML += `
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; padding: 5px 8px; background: #f9fafb; border-radius: 4px;">
+                        <span style="font-size: 0.85em; color: #555; flex: 1;">${activity}</span>
+                        <span style="font-size: 0.85em; font-weight: 600; color: #667eea; margin-left: 10px;">${count}x (${percentage}%)</span>
+                    </div>
+                `;
+            }
+            activitiesListHTML += '</div>';
+        }
+        
         html += `
-            <div class="stat-card">
-                <div class="stat-label">${empId}</div>
-                <div class="stat-value">${empStats.total_activities}</div>
-                <div style="font-size: 0.9em; color: #666; margin-top: 10px;">
-                    <strong>Top Activity:</strong> ${empStats.top_activity || 'N/A'}<br>
-                    <strong>Unique Activities:</strong> ${empStats.unique_activities}
+            <div class="employee-card" style="background: white; padding: 18px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                <div class="employee-name" style="font-weight: 700; font-size: 1.1em; color: #667eea; margin-bottom: 10px;">
+                    ${empId}
                 </div>
+                <div class="employee-activity-count" style="font-size: 2em; font-weight: bold; color: #333; margin-bottom: 10px;">
+                    ${empStats.total_activities}
+                </div>
+                <div style="font-size: 0.85em; color: #666;">
+                    <div style="margin-bottom: 5px;">
+                        <strong>Total:</strong> ${empStats.total_activities} ${activityText}
+                    </div>
+                    <div style="margin-bottom: 5px;">
+                        <strong>Unique Activities:</strong> ${empStats.unique_activities}
+                    </div>
+                </div>
+                ${activitiesListHTML}
             </div>
         `;
     }
